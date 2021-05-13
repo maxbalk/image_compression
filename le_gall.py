@@ -243,12 +243,16 @@ len_row = 0
 for k, symbol in enumerate(newsymbols):
     for i in range(symbol[0]):
         len_row += 1
+    if len_row >= 512:
+        curr_row += 1
+        len_row = 0
+        continue
     try:
         construction[curr_row][len_row] = int(newamps[k], 2)
     except:
-        pass
+        construction[curr_row][len_row] = 0
     len_row += 1
-    if len_row == 512:
+    if len_row >= 512:
         curr_row += 1
         len_row = 0
 
