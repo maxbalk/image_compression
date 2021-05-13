@@ -121,10 +121,10 @@ def run_size(img):
                 n_zero = 0
             elif char != 0:
                 run = n_zero
-                n_zero = 0
                 group, amp = amplitude(char)
                 symbols.append((n_zero, group))
                 amps.append(f"{int(amp):b}")
+                n_zero = 0
             else:
                 n_zero += 1
 
@@ -225,7 +225,6 @@ def prefix_decode(bitstream: str, codebook: dict, out=False):
         symbols.append(codebook[curr_word])
         bitstream = bitstream[len(curr_word):]
         if codebook[curr_word][1] == 0:
-            amps.append(0)
             bitsream = bitstream[1:]
         else:
             amps.append(bitstream[:codebook[curr_word][1]])
