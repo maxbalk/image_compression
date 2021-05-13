@@ -117,7 +117,6 @@ def run_size(img):
         for char in row:
             if n_zero > max_run:
                 symbols.append( (max_run,0) )
-                amps.append(f"{int(0):b}")
                 n_zero = 0
             elif char != 0:
                 run = n_zero
@@ -127,6 +126,8 @@ def run_size(img):
                 n_zero = 0
             else:
                 n_zero += 1
+        if n_zero > 0:
+            symbols.append( (0,0) )
 
 def symbol_dist(symbols):
     symbol_distribution = {}
@@ -194,9 +195,12 @@ def build_huffman_book(dist: dict):
 
 def create_bitstream():
     bitstream = ''
+    amp_idx = 0
     for i, symbol in enumerate(symbols):
         bitstream += huffman_book[symbol]
-        bitstream += str(amps[i])
+        if huffman_book[symbol][1] != 0:
+            bitstream += str(amps[j])
+            j += 1
     return bitstream
 
 def avg_bitrate(book: dict, dist: dict):
