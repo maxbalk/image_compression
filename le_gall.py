@@ -40,7 +40,7 @@ def analysis(img):
     bands = np.rot90(bands, -1)
     return bands
 
-decomp_level = 2
+decomp_level = 3
 y_out = deepcopy(img)
 x_dim = y_out.shape[0]
 y_dim = y_out.shape[1]
