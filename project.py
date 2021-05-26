@@ -2,9 +2,8 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-img = cv2.imread('lena.jpg',0)
-img = img.astype(np.double)
-from copy import deepcopy, copy
+
+from copy import deepcopy
 
 # define filter coefficients
 lo_forward = np.array([-1/8, 2/8, 6/8, 2/8, -1/8])
@@ -42,7 +41,6 @@ def analysis(img):
 
 
 def reconstruct(img):
-    rows = []
     for i, row in enumerate(img):
         g0 = row[:int(len(row)/2)]
         g1 = row[int(len(row)/2):]
@@ -63,25 +61,15 @@ def synthesis(img):
     bands = reconstruct(bands)
     return bands
 
-decomp_level = 1
-x_dim = img.shape[0]
-y_dim = img.shape[1]
-
 def forwardDWT(y_out):
     for i in range(decomp_level):    
         y_out[:int(x_dim/(2**i)),:int(y_dim/(2**i))] = analysis(y_out[:int(x_dim/(2**i)),:int(y_dim/(2**i))])
     return y_out
 
-
-
 def inverseDWT(x_hat):
     for i in reversed(range(decomp_level)):
         x_hat[:int(x_dim/(2**i)),:int(y_dim/(2**i))] = synthesis(x_hat[:int(x_dim/(2**i)),:int(y_dim/(2**i))])
     return x_hat
-
-def uniformQuantize(q, img):
-    quantized = np.round(np.divide(img, q))
-    return quantized
 
 amp_table = {
     1: 1,
@@ -106,23 +94,20 @@ def amplitude(char):
                return (group, val - abs(char))
             return (group, char)
 
-
-symbols_bits = []
-
-
-max_run = 15
 def run_size(img):
     for row in img:
         n_zero = 0
         for char in row:
-            if n_zero > max_run:
+            if n_zero >= max_run:
                 symbols.append( (max_run,0) )
                 n_zero = 0
             elif char != 0:
-                run = n_zero
                 group, amp = amplitude(char)
                 symbols.append((n_zero, group))
-                amps.append(f"{int(amp):b}")
+                bin = f"{int(amp):b}"
+                for i in range(group - len(f"{int(amp):b}")):
+                    bin = '0' + bin
+                amps.append(bin)
                 n_zero = 0
             else:
                 n_zero += 1
@@ -141,18 +126,6 @@ def symbol_dist(symbols):
         symbol_distribution[key] /= len(symbols)
 
     return symbol_distribution
-
-transformed = forwardDWT(img)
-#plt.imshow(transformed)
-#plt.show()
-q = 16
-quantized = uniformQuantize(q, transformed)
-
-symbols = []
-amps = []
-run_size(quantized)
-
-symbol_dist = symbol_dist(symbols)
 
 class node():
     def __init__(self, pr=None, left=None, right=None, data=None):
@@ -196,11 +169,11 @@ def build_huffman_book(dist: dict):
 def create_bitstream():
     bitstream = ''
     amp_idx = 0
-    for i, symbol in enumerate(symbols):
+    for symbol in symbols:
         bitstream += huffman_book[symbol]
-        if huffman_book[symbol][1] != 0:
-            bitstream += str(amps[j])
-            j += 1
+        if symbol[1] != 0:
+            bitstream += str(amps[amp_idx])
+            amp_idx += 1
     return bitstream
 
 def avg_bitrate(book: dict, dist: dict):
@@ -209,12 +182,7 @@ def avg_bitrate(book: dict, dist: dict):
         br += len(code) * list(dist.values())[i]
     return br
 
-huffman_book = build_huffman_book(symbol_dist)
-bitstream = create_bitstream()
-bitrate = avg_bitrate(huffman_book, symbol_dist)
-
-def prefix_decode(bitstream: str, codebook: dict, out=False):
-    """ dont really need this but the pseudocode was in the book """
+def decode(bitstream: str, codebook: dict):
     symbols = []
     amps = []
     while bitstream:
@@ -225,45 +193,84 @@ def prefix_decode(bitstream: str, codebook: dict, out=False):
             try:
                 curr_word += bitstream[i]
             except:
-                return False
+                raise RuntimeError
         symbols.append(codebook[curr_word])
         bitstream = bitstream[len(curr_word):]
-        if codebook[curr_word][1] == 0:
-            bitsream = bitstream[1:]
-        else:
+        if codebook[curr_word][1] != 0:
             amps.append(bitstream[:codebook[curr_word][1]])
             bitstream = bitstream[codebook[curr_word][1]:]
-    if out:
-        print(res)
     return symbols, amps
 
+def inverse_amp(group, amp_symbol):
+    if amp_symbol[0] == '0':
+        return int(amp_symbol, 2) - amp_table[group]
+    else:
+        return int(amp_symbol, 2)
+
+def subband_reconstruction(): # inverse run, size amplitude
+    construction = np.zeros((512,512))
+    curr_row = 0
+    row_idx = 0
+    amp_idx = 0
+    for i, symbol in enumerate(newsymbols):
+        if symbol == (0,0):
+            curr_row += 1
+            row_idx = 0
+            continue
+        row_idx += symbol[0] # preceding of zeros
+        if row_idx >= 512:
+            curr_row += 1
+            row_idx = 0
+        if symbol[1] != 0:
+            construction[curr_row][row_idx] = inverse_amp(symbol[1], newamps[amp_idx])
+            amp_idx += 1
+        row_idx += 1
+    return construction
+
+img = cv2.imread('lena.jpg',0)
+img = img.astype(np.double)
+
+
+""" FORWARD DWT """
+decomp_level = 4
+x_dim = img.shape[0]
+y_dim = img.shape[1]
+max_run = 15
+transformed = forwardDWT(img)
+plt.imshow(transformed)
+plt.show()
+
+""" UNIFORM QUANTIZATION """ 
+q = 16
+quantized = np.round(np.divide(img, q))
+
+""" RUN SIZE AMPLITUDE ENCODING """
+symbols = []
+amps = []
+run_size(quantized)
+
+""" HUFFMAN ENCODING AND BITSTREAM FORMATION """
+sym_dist = symbol_dist(symbols)
+huffman_book = build_huffman_book(sym_dist)
+bitstream = create_bitstream()
+bitrate = avg_bitrate(huffman_book, sym_dist)
+print(bitrate)
+""" HUFFMAN DECODING """
 reverse_book = {v:k for k,v in huffman_book.items()}
-newsymbols, newamps = prefix_decode(bitstream, reverse_book)
+newsymbols, newamps = decode(bitstream, reverse_book)
 
-construction = np.zeros((512,512))
-curr_row = 0
-len_row = 0
-for k, symbol in enumerate(newsymbols):
-    for i in range(symbol[0]):
-        len_row += 1
-    if len_row >= 512:
-        curr_row += 1
-        len_row = 0
-        continue
-    try:
-        construction[curr_row][len_row] = int(newamps[k], 2)
-    except:
-        construction[curr_row][len_row] = 0
-    len_row += 1
-    if len_row >= 512:
-        curr_row += 1
-        len_row = 0
+""" RUN SIZE AMPLITUDE DECODING """
+constructed = subband_reconstruction()
 
-dequantized = np.multiply(construction, q)
+""" INVERSE QUANTIZATION """ 
+dequantized = np.multiply(constructed, q)
+
+""" INVERSE DWT """ 
 x_hat = inverseDWT(dequantized)
 
 plt.imshow(x_hat)
 plt.show()
 mse = (np.square(img - x_hat)).mean(axis=None)
-print(mse)
+psnr = 10 * math.log10((255**2)/mse)
+print(psnr)
 
