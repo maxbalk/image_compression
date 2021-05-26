@@ -1,5 +1,5 @@
 # image_compression
-
+# CS4670 Final Project
 End to end image compression.
 ## Encoding
 1. Forward discrete wavelet transform
